@@ -1,0 +1,11 @@
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\bin\Debug\MicroMaze.exe.config
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\bin\Debug\MicroMaze.exe
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\bin\Debug\MicroMaze.pdb
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.csproj.AssemblyReference.cache
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.csproj.SuggestedBindingRedirects.cache
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.Form1.resources
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.Properties.Resources.resources
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.csproj.GenerateResource.cache
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.csproj.CoreCompileInputs.cache
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.exe
+D:\Projects\MicroMaze\MicroMaze\MicroMaze\obj\Debug\MicroMaze.pdb
