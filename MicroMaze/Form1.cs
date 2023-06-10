@@ -28,6 +28,9 @@ namespace MicroMaze
         Panel panelExit = new Panel();
 
         private CancellationTokenSource resetCts;
+        private Dictionary<string, Func<int, int, int[,]>> mazeGenerationMethods;
+        private Dictionary<string, Func<int, int, bool[,], Task>> mazeSolvingMethods;
+
 
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -50,24 +53,18 @@ namespace MicroMaze
             mazeWidth.Text = "56";
             mazeHeight.Text = "33";
 
+            //Maz Generation Methods
+            mazeGenerationMethods = new Dictionary<string, Func<int, int, int[,]>>();
+            mazeGenerationMethods.Add("Recursive Backtracker", GenerateMazeRecursiveBacktracker);
+            mazeGenerationMethods.Add("Prims Algorithm", GenerateMazePrims);
+            cboxMazeTypes.Items.AddRange(mazeGenerationMethods.Keys.ToArray());
 
-            List<string> mazeTypes = new List<string>();
-            mazeTypes.Add("Recursive Backtracker");
-            mazeTypes.Add("Prims Algorithm");
 
-            for (int i = 0; i < mazeTypes.Count; i++)
-            {
-                cboxMazeTypes.Items.Add(mazeTypes[i]);
-            }
-
-            List<string> solveMethods = new List<string>();
-            solveMethods.Add("DFS");
-            solveMethods.Add("BFS");
-
-            for (int i = 0; i < solveMethods.Count; i++)
-            {
-                cboxSolveMethod.Items.Add(solveMethods[i]);
-            }
+            //maze solve methods
+            mazeSolvingMethods = new Dictionary<string, Func<int, int, bool[,], Task>>();
+            mazeSolvingMethods.Add("DFS", DFS);  // Assumes DFS has signature: (int, int, bool[,]) => Task
+            mazeSolvingMethods.Add("BFS", BFS);  // Assumes BFS has signature: (int, int, bool[,]) => Task
+            cboxSolveMethod.Items.AddRange(mazeSolvingMethods.Keys.ToArray());
 
 
 
@@ -249,7 +246,6 @@ namespace MicroMaze
                 frontiers.Add(new Tuple<int, int>(x + 2, y));
         }
 
-
         /***************************************************************************************/
         /***************************************************************************************/
 
@@ -270,32 +266,23 @@ namespace MicroMaze
             //common configs
             bool[,] visited = new bool[maze.GetLength(0), maze.GetLength(1)];
 
-            switch (cboxSolveMethod.Text)
+            string selectedMethod = cboxSolveMethod.Text;
+            if (mazeSolvingMethods.TryGetValue(selectedMethod, out Func<int, int, bool[,], Task> solver))
             {
-                case "DFS":
-
-
-                    // The path stack
-                    Stack<Tuple<int, int>> path = new Stack<Tuple<int, int>>();
-
-                    // Call DFS from player's position
-                    await DFS(mouseX, mouseY, visited, path);
-
-                    break;
-
-                case "BFS":
-
-                    // The queue for BFS
-                    Queue<Tuple<int, int>> queue = new Queue<Tuple<int, int>>();
-
-                    // The dictionary for predecessors
-                    Dictionary<Tuple<int, int>, Tuple<int, int>> predecessors = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
-
-                    // Call BFS from player's position
-                    await BFS(mouseX, mouseY, visited, queue);
-
-                    break;
+                await solver(mouseX, mouseY, visited);
             }
+            else
+            {
+                // Handle the case where no valid method was selected
+                // For example, use a default solver
+                await DFS(mouseX, mouseY, visited);
+            }
+        }
+
+        private async Task DFS(int x, int y, bool[,] visited)
+        {
+            Stack<Tuple<int, int>> path = new Stack<Tuple<int, int>>();
+            await DFS(x, y, visited, path);
         }
 
         private async Task<bool> DFS(int x, int y, bool[,] visited, Stack<Tuple<int, int>> path)
@@ -355,6 +342,12 @@ namespace MicroMaze
             }
             return false;
             
+        }
+
+        private async Task BFS(int x, int y, bool[,] visited)
+        {
+            Queue<Tuple<int, int>> queue = new Queue<Tuple<int, int>>();
+            await BFS(x, y, visited, queue);
         }
 
         private async Task BFS(int x, int y, bool[,] visited, Queue<Tuple<int, int>> queue)
@@ -444,19 +437,16 @@ namespace MicroMaze
 
                 // Generate the maze
 
-                switch (cboxMazeTypes.Text)
+                string selectedMethod = cboxMazeTypes.Text;
+                if (mazeGenerationMethods.TryGetValue(selectedMethod, out Func<int, int, int[,]> generator))
                 {
-                    case "Recursive Backtracker":
-                        maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
-                        break;
-
-                    case "Prims Algorithm":
-                        maze = await Task.Run(() => GenerateMazePrims(width, height));
-                        break;
-
-                    default:
-                        maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
-                        break;
+                    maze = await Task.Run(() => generator(width, height));
+                }
+                else
+                {
+                    // Handle the case where no valid method was selected
+                    // For example, use a default generator
+                    maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
                 }
 
                 do
