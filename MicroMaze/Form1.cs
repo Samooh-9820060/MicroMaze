@@ -27,8 +27,7 @@ namespace MicroMaze
         Panel panelMouse = new Panel();
         Panel panelExit = new Panel();
 
-        private CancellationTokenSource cts = new CancellationTokenSource();
-        private CancellationTokenSource resetCts = new CancellationTokenSource();
+        private CancellationTokenSource resetCts;
 
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -186,94 +185,8 @@ namespace MicroMaze
         /*Prims Algorithm*/
         /***************************************************************************************/
 
-        private int[,] GenerateMazePrim(int width, int height)
-        {
-            // Create a maze full of walls
-            int[,] maze = new int[height, width];
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    maze[y, x] = 1;
-                }
-            }
 
-            // Pick a random starting cell
-            int startX = rand.Next(width);
-            int startY = rand.Next(height);
 
-            // Mark the starting cell as part of the maze
-            maze[startY, startX] = 0;
-
-            // Create a list to store the frontier cells
-            List<(int, int)> frontier = new List<(int, int)>();
-            AddFrontierCells(frontier, maze, startX, startY, width, height);
-
-            // While there are frontier cells
-            while (frontier.Count > 0)
-            {
-                // Pick a random frontier cell
-                int randomIndex = rand.Next(frontier.Count);
-                (int fx, int fy) = frontier[randomIndex];
-                frontier.RemoveAt(randomIndex);
-
-                // Find the neighboring cells
-                List<(int, int)> neighbors = GetNeighbors(fx, fy, width, height);
-
-                // Count the number of cells in the maze
-                int mazeCellCount = 0;
-                foreach ((int nx, int ny) in neighbors)
-                {
-                    if (maze[ny, nx] == 0)
-                    {
-                        mazeCellCount++;
-                    }
-                }
-
-                // If the frontier cell has exactly one neighboring cell in the maze
-                if (mazeCellCount == 1)
-                {
-                    // Add the frontier cell to the maze
-                    maze[fy, fx] = 0;
-
-                    // Add the neighboring cells to the frontier list
-                    AddFrontierCells(frontier, maze, fx, fy, width, height);
-                }
-            }
-
-            return maze;
-        }
-
-        private void AddFrontierCells(List<(int, int)> frontier, int[,] maze, int x, int y, int width, int height)
-        {
-            List<(int, int)> neighbors = GetNeighbors(x, y, width, height);
-            foreach ((int nx, int ny) in neighbors)
-            {
-                if (maze[ny, nx] == 1)
-                {
-                    frontier.Add((nx, ny));
-                    maze[ny, nx] = 2; // Mark frontier cells as "2" temporarily
-                }
-            }
-        }
-
-        private List<(int, int)> GetNeighbors(int x, int y, int width, int height)
-        {
-            int[] dx = { 0, 1, 0, -1 };
-            int[] dy = { -1, 0, 1, 0 };
-
-            List<(int, int)> neighbors = new List<(int, int)>();
-            for (int i = 0; i < 4; i++)
-            {
-                int nx = x + dx[i], ny = y + dy[i];
-                if (nx >= 0 && ny >= 0 && nx < width && ny < height)
-                {
-                    neighbors.Add((nx, ny));
-                }
-            }
-
-            return neighbors;
-        }
 
         /***************************************************************************************/
         /***************************************************************************************/
@@ -287,12 +200,18 @@ namespace MicroMaze
             // Reset the player's position
             panelMouse.Location = new Point(mouseX * CELL_SIZE, mouseY * CELL_SIZE);
 
+            // Reset the CancellationTokenSource
+            resetCts?.Cancel();
+            resetCts = new CancellationTokenSource();
+
+
+            //common configs
+            bool[,] visited = new bool[maze.GetLength(0), maze.GetLength(1)];
+
             switch (cboxSolveMethod.Text)
             {
                 case "DFS":
 
-                    // Create a visited matrix
-                    bool[,] visited = new bool[maze.GetLength(0), maze.GetLength(1)];
 
                     // The path stack
                     Stack<Tuple<int, int>> path = new Stack<Tuple<int, int>>();
@@ -304,8 +223,14 @@ namespace MicroMaze
 
                 case "BFS":
 
+                    // The queue for BFS
+                    Queue<Tuple<int, int>> queue = new Queue<Tuple<int, int>>();
+
+                    // The dictionary for predecessors
+                    Dictionary<Tuple<int, int>, Tuple<int, int>> predecessors = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
+
                     // Call BFS from player's position
-                    await BFS(mouseX, mouseY);
+                    await BFS(mouseX, mouseY, visited, queue);
 
                     break;
             }
@@ -313,12 +238,6 @@ namespace MicroMaze
 
         private async Task<bool> DFS(int x, int y, bool[,] visited, Stack<Tuple<int, int>> path)
         {
-            if (resetCts.Token.IsCancellationRequested)
-            {
-                // If reset is requested, don't resume movement
-                return true;
-            }
-
             // Check if out of bounds or visited or is a wall
             if (x < 0 || y < 0 || x >= maze.GetLength(1) || y >= maze.GetLength(0) || visited[y, x] || maze[y, x] == 1)
             {
@@ -335,6 +254,13 @@ namespace MicroMaze
             panelMouse.Location = new Point(x * CELL_SIZE, y * CELL_SIZE);
             await Task.Delay(100); // adjust delay as needed
 
+            //check if reset is requested
+            if (resetCts.Token.IsCancellationRequested)
+            {
+                // If reset is requested, don't resume movement
+                return false;
+            }
+
             // Check if reached exit
             if (x == exitX && y == exitY)
             {
@@ -350,6 +276,13 @@ namespace MicroMaze
                 return true;
             }
 
+            // Check again if reset is requested before backtracking
+            if (resetCts.Token.IsCancellationRequested)
+            {
+                // If reset is requested, don't resume movement
+                return false;
+            }
+
             // If none of the directions leads to the exit, remove the position from the path (backtrack) and update the player's position
             path.Pop();
             if (path.Count > 0)
@@ -362,75 +295,47 @@ namespace MicroMaze
             
         }
 
-        private async Task BFS(int startX, int startY)
+        private async Task BFS(int x, int y, bool[,] visited, Queue<Tuple<int, int>> queue)
         {
-            // Create a visited matrix
-            bool[,] visited = new bool[maze.GetLength(0), maze.GetLength(1)];
+            // The directions array
+            int[,] dirs = { { 0, 1 }, { 1, 0 }, { 0, -1 }, { -1, 0 } }; // right, down, left, up
 
-            // Create a dictionary to keep track of paths
-            Dictionary<Tuple<int, int>, Tuple<int, int>> comeFrom = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
-
-            // Create a queue for BFS and enqueue start position
-            Queue<Tuple<int, int>> queue = new Queue<Tuple<int, int>>();
-            queue.Enqueue(new Tuple<int, int>(startX, startY));
+            // Add the starting position to the queue and mark it as visited
+            queue.Enqueue(new Tuple<int, int>(x, y));
+            visited[y, x] = true;
 
             while (queue.Count > 0)
             {
-                var current = queue.Dequeue();
-                var x = current.Item1;
-                var y = current.Item2;
-
-                // Check if out of bounds or visited or is a wall
-                if (x < 0 || y < 0 || x >= maze.GetLength(1) || y >= maze.GetLength(0) || visited[y, x] || maze[y, x] == 1)
+                // Check if reset is requested
+                if (resetCts.Token.IsCancellationRequested)
                 {
-                    continue;
-                }
-
-                // Mark as visited
-                visited[y, x] = true;
-
-                // Update the player position and delay 
-                panelMouse.Location = new Point(x * CELL_SIZE, y * CELL_SIZE);
-                await Task.Delay(100); // adjust delay as needed
-
-                // Check if reached exit
-                if (x == exitX && y == exitY)
-                {
-                    // If the exit is found, backtrack along the path and update the player position
-                    var path = new Stack<Tuple<int, int>>();
-                    var node = current;
-
-                    while (node != null)
-                    {
-                        path.Push(node);
-                        comeFrom.TryGetValue(node, out node);
-                    }
-
-                    while (path.Count > 0)
-                    {
-                        var pos = path.Pop();
-                        panelMouse.Location = new Point(pos.Item1 * CELL_SIZE, pos.Item2 * CELL_SIZE);
-                        await Task.Delay(100); // adjust delay as needed
-                    }
-
+                    // If reset is requested, don't resume movement
                     return;
                 }
 
-                // Enqueue neighbors
-                var neighbors = new List<Tuple<int, int>>()
-                {
-                    new Tuple<int, int>(x + 1, y), // right
-                    new Tuple<int, int>(x, y + 1), // down
-                    new Tuple<int, int>(x - 1, y), // left
-                    new Tuple<int, int>(x, y - 1), // up
-                };
+                // Dequeue the current cell
+                var cell = queue.Dequeue();
 
-                foreach (var neighbor in neighbors)
+                // Update the player position and delay 
+                panelMouse.Location = new Point(cell.Item1 * CELL_SIZE, cell.Item2 * CELL_SIZE);
+                await Task.Delay(100); // adjust delay as needed
+
+                // If the exit is found
+                if (cell.Item1 == exitX && cell.Item2 == exitY)
                 {
-                    if (!visited[neighbor.Item2, neighbor.Item1] && maze[neighbor.Item2, neighbor.Item1] != 1)
+                    return;
+                }
+
+                // Enqueue all valid and unvisited neighbors
+                for (int i = 0; i < 4; i++)
+                {
+                    int nx = cell.Item1 + dirs[i, 0];
+                    int ny = cell.Item2 + dirs[i, 1];
+
+                    if (nx >= 0 && ny >= 0 && nx < maze.GetLength(1) && ny < maze.GetLength(0) && !visited[ny, nx] && maze[ny, nx] != 1)
                     {
-                        comeFrom[neighbor] = current;
-                        queue.Enqueue(neighbor);
+                        queue.Enqueue(new Tuple<int, int>(nx, ny));
+                        visited[ny, nx] = true;
                     }
                 }
             }
@@ -438,6 +343,30 @@ namespace MicroMaze
 
         /***************************************************************************************/
         /***************************************************************************************/
+
+
+        /***************************************OTHERS******************************************/
+        /***************************************************************************************/
+
+        private bool validateStartMazeFields()
+        {
+            bool valid = true;
+
+            //validation tasks list
+
+
+            return valid;
+        }
+
+        private bool validateGenerateMazeFields()
+        {
+            bool valid = true;
+
+            //validation tasks list
+
+
+            return valid;
+        }
 
 
         /***************************************BUTTONS*****************************************/
@@ -445,83 +374,79 @@ namespace MicroMaze
 
         private async void btnNewMaze_Click(object sender, EventArgs e)
         {
-            int width = Int32.Parse(mazeWidth.Text);
-            int height = Int32.Parse(mazeHeight.Text);
 
-            // Generate the maze
-
-            switch (cboxMazeTypes.Text)
+            if (validateGenerateMazeFields() == true)
             {
-                case "Recursive Backtracker":
-                    maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
-                    break;
+                int width = Int32.Parse(mazeWidth.Text);
+                int height = Int32.Parse(mazeHeight.Text);
 
-                case "Prims Algorithm":
-                    maze = await Task.Run(() => GenerateMazePrim(width, height));
-                    break;
+                // Generate the maze
 
-                default:
-                    maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
-                    break;
+                switch (cboxMazeTypes.Text)
+                {
+                    case "Recursive Backtracker":
+                        maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
+                        break;
+
+                    case "Prims Algorithm":
+                        maze = await Task.Run(() => GenerateMazePrims(width, height));
+                        break;
+
+                    default:
+                        maze = await Task.Run(() => GenerateMazeRecursiveBacktracker(width, height));
+                        break;
+                }
+
+                do
+                {
+                    mouseX = rand.Next(width);
+                    mouseY = rand.Next(height);
+                } while (maze[mouseY, mouseX] == 1);
+
+                // Find a random empty cell for the exit
+                do
+                {
+                    exitX = rand.Next(width);
+                    exitY = rand.Next(height);
+                } while (maze[exitY, exitX] == 1 || (exitX == mouseX && exitY == mouseY));
+
+                // Add the mouse panel to the maze panel
+                panelMouse.BackColor = Color.Red;
+                panelMouse.Size = new Size(CELL_SIZE, CELL_SIZE);
+                panelMouse.Location = new Point(mouseX * CELL_SIZE, mouseY * CELL_SIZE);
+                panelMaze.Controls.Add(panelMouse);
+
+                // Add the exit panel to the maze panel
+                panelExit.BackColor = Color.Green;
+                panelExit.Size = new Size(CELL_SIZE, CELL_SIZE);
+                panelExit.Location = new Point(exitX * CELL_SIZE, exitY * CELL_SIZE);
+                panelMaze.Controls.Add(panelExit);
+
+                // Redraw the maze
+                panelMaze.Invalidate();
             }
-
-            do
-            {
-                mouseX = rand.Next(width);
-                mouseY = rand.Next(height);
-            } while (maze[mouseY, mouseX] == 1);
-
-            // Find a random empty cell for the exit
-            do
-            {
-                exitX = rand.Next(width);
-                exitY = rand.Next(height);
-            } while (maze[exitY, exitX] == 1 || (exitX == mouseX && exitY == mouseY));
-
-            // Add the mouse panel to the maze panel
-            panelMouse.BackColor = Color.Red;
-            panelMouse.Size = new Size(CELL_SIZE, CELL_SIZE);
-            panelMouse.Location = new Point(mouseX * CELL_SIZE, mouseY * CELL_SIZE);
-            panelMaze.Controls.Add(panelMouse);
-
-            // Add the exit panel to the maze panel
-            panelExit.BackColor = Color.Green;
-            panelExit.Size = new Size(CELL_SIZE, CELL_SIZE);
-            panelExit.Location = new Point(exitX * CELL_SIZE, exitY * CELL_SIZE);
-            panelMaze.Controls.Add(panelExit);
-
-            // Redraw the maze
-            panelMaze.Invalidate();
         }
 
         private void btnStart_Click(object sender, EventArgs e)
         {
+            if (validateStartMazeFields() == true)
+            {
 
-            // Reset the reset token
-            resetCts = new CancellationTokenSource();
+                // Reset the reset token
+                //resetCts = new CancellationTokenSource();
 
-            MoveMouseAI();
+
+                // Start the AI movement
+                MoveMouseAI();
+            }
         }
-
 
         private void btnReset_Click(object sender, EventArgs e)
         {
-            resetCts.Cancel();
+            // Cancel the ongoing BFS/DFS
+            resetCts?.Cancel();
 
-            // Stop AI movement
-            cts.Cancel();
-
-            // Reset CancellationTokenSource
-            cts = new CancellationTokenSource();
-
-            // Set mouse starting position
-            do
-            {
-                mouseX = rand.Next(maze.GetLength(1));
-                mouseY = rand.Next(maze.GetLength(0));
-            } while (maze[mouseY, mouseX] == 1);
-
-            // Move mouse back to the start position
+            // Reset the player's position
             panelMouse.Location = new Point(mouseX * CELL_SIZE, mouseY * CELL_SIZE);
         }
 
