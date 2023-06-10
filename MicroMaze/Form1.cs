@@ -185,7 +185,69 @@ namespace MicroMaze
         /*Prims Algorithm*/
         /***************************************************************************************/
 
+        private int[,] GenerateMazePrims(int width, int height)
+        {
+            // Create a maze full of walls
+            int[,] maze = new int[height, width];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    maze[y, x] = 1;
 
+            // Pick a random starting cell
+            int startX = rand.Next(width);
+            int startY = rand.Next(height);
+
+            // List of all frontier cells
+            List<Tuple<int, int>> frontiers = new List<Tuple<int, int>>();
+
+            // Mark the starting cell as visited and add its frontier cells
+            maze[startY, startX] = 0;
+            AddFrontiers(maze, startX, startY, width, height, frontiers);
+
+            while (frontiers.Count > 0)
+            {
+                // Pick a random frontier cell
+                var idx = rand.Next(frontiers.Count);
+                var frontier = frontiers[idx];
+                frontiers.RemoveAt(idx);
+
+                // List all neighbors of the frontier cell that are in the maze
+                List<Tuple<int, int>> neighbors = new List<Tuple<int, int>>();
+                if (frontier.Item2 > 1 && maze[frontier.Item2 - 2, frontier.Item1] == 0)
+                    neighbors.Add(new Tuple<int, int>(0, -1));
+                if (frontier.Item2 < height - 2 && maze[frontier.Item2 + 2, frontier.Item1] == 0)
+                    neighbors.Add(new Tuple<int, int>(0, 1));
+                if (frontier.Item1 > 1 && maze[frontier.Item2, frontier.Item1 - 2] == 0)
+                    neighbors.Add(new Tuple<int, int>(-1, 0));
+                if (frontier.Item1 < width - 2 && maze[frontier.Item2, frontier.Item1 + 2] == 0)
+                    neighbors.Add(new Tuple<int, int>(1, 0));
+
+                if (neighbors.Count > 0)
+                {
+                    // Connect the frontier cell to a random neighbor
+                    var dir = neighbors[rand.Next(neighbors.Count)];
+                    maze[frontier.Item2 + dir.Item2, frontier.Item1 + dir.Item1] = 0;
+                    maze[frontier.Item2, frontier.Item1] = 0;
+
+                    // Add new frontier cells
+                    AddFrontiers(maze, frontier.Item1, frontier.Item2, width, height, frontiers);
+                }
+            }
+
+            return maze;
+        }
+
+        private void AddFrontiers(int[,] maze, int x, int y, int width, int height, List<Tuple<int, int>> frontiers)
+        {
+            if (y > 1 && maze[y - 2, x] == 1)
+                frontiers.Add(new Tuple<int, int>(x, y - 2));
+            if (y < height - 2 && maze[y + 2, x] == 1)
+                frontiers.Add(new Tuple<int, int>(x, y + 2));
+            if (x > 1 && maze[y, x - 2] == 1)
+                frontiers.Add(new Tuple<int, int>(x - 2, y));
+            if (x < width - 2 && maze[y, x + 2] == 1)
+                frontiers.Add(new Tuple<int, int>(x + 2, y));
+        }
 
 
         /***************************************************************************************/
