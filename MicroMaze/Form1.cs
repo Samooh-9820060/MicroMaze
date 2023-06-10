@@ -55,6 +55,7 @@ namespace MicroMaze
 
             //Maz Generation Methods
             mazeGenerationMethods = new Dictionary<string, Func<int, int, int[,]>>();
+            mazeGenerationMethods.Add("Kruskal's Algorithm", GenerateMazeKruskal);
             mazeGenerationMethods.Add("Recursive Backtracker", GenerateMazeRecursiveBacktracker);
             mazeGenerationMethods.Add("Prims Algorithm", GenerateMazePrims);
             cboxMazeTypes.Items.AddRange(mazeGenerationMethods.Keys.ToArray());
@@ -244,6 +245,123 @@ namespace MicroMaze
                 frontiers.Add(new Tuple<int, int>(x - 2, y));
             if (x < width - 2 && maze[y, x + 2] == 1)
                 frontiers.Add(new Tuple<int, int>(x + 2, y));
+        }
+
+        /***************************************************************************************/
+        /*Kruskal's Algorithm*/
+        /***************************************************************************************/
+
+        public int[,] GenerateMazeKruskal(int width, int height)
+        {
+            // Initialize maze with walls
+            int[,] maze = new int[height, width];
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    maze[y, x] = 1;
+                }
+            }
+
+            // Initialize disjoint set
+            int cellCount = width * height;
+            DisjointSet disjointSet = new DisjointSet(cellCount);
+
+            // Initialize wall list and shuffle it
+            List<Tuple<int, int, int, int>> walls = new List<Tuple<int, int, int, int>>();
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (y > 0)
+                    {
+                        walls.Add(Tuple.Create(y, x, y - 1, x));  // vertical wall
+                    }
+                    if (x > 0)
+                    {
+                        walls.Add(Tuple.Create(y, x, y, x - 1));  // horizontal wall
+                    }
+                }
+            }
+            Shuffle(walls);
+
+            // Iterate over walls
+            foreach (var wall in walls)
+            {
+                // If the cells divided by the wall belong to distinct sets
+                if (disjointSet.Find(wall.Item1 * width + wall.Item2) != disjointSet.Find(wall.Item3 * width + wall.Item4))
+                {
+                    // Remove the wall and join the sets
+                    maze[(wall.Item1 + wall.Item3) / 2, (wall.Item2 + wall.Item4) / 2] = 0;
+                    disjointSet.Union(wall.Item1 * width + wall.Item2, wall.Item3 * width + wall.Item4);
+                }
+            }
+
+            return maze;
+        }
+
+        private void Shuffle<T>(List<T> list)
+        {
+            Random rng = new Random();
+            int n = list.Count;
+            while (n > 1)
+            {
+                n--;
+                int k = rng.Next(n + 1);
+                T value = list[k];
+                list[k] = list[n];
+                list[n] = value;
+            }
+        }
+
+        public class DisjointSet
+        {
+            private int[] parent;
+            private int[] rank;
+
+            public DisjointSet(int count)
+            {
+                parent = new int[count];
+                rank = new int[count];
+
+                for (int i = 0; i < count; i++)
+                {
+                    parent[i] = i;
+                    rank[i] = 0;
+                }
+            }
+
+            public int Find(int i)
+            {
+                if (i != parent[i])
+                {
+                    parent[i] = Find(parent[i]);  // path compression
+                }
+                return parent[i];
+            }
+
+            public void Union(int i, int j)
+            {
+                int ri = Find(i), rj = Find(j);
+
+                if (ri != rj)
+                {
+                    // Make the root of the smaller rank point to the root of the larger rank
+                    if (rank[ri] < rank[rj])
+                    {
+                        parent[ri] = rj;
+                    }
+                    else if (rank[ri] > rank[rj])
+                    {
+                        parent[rj] = ri;
+                    }
+                    else  // ranks are equal
+                    {
+                        parent[ri] = rj;
+                        rank[rj]++;
+                    }
+                }
+            }
         }
 
         /***************************************************************************************/
