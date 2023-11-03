@@ -50,8 +50,8 @@ namespace MicroMaze
 
         private void setStartingValues()
         {
-            mazeWidth.Text = "56";
-            mazeHeight.Text = "33";
+            mazeWidth.Text = "20";
+            mazeHeight.Text = "20";
 
             //Maz Generation Methods
             mazeGenerationMethods = new Dictionary<string, Func<int, int, int[,]>>();
@@ -63,6 +63,7 @@ namespace MicroMaze
 
             //maze solve methods
             mazeSolvingMethods = new Dictionary<string, Func<int, int, bool[,], Task>>();
+            mazeSolvingMethods.Add("A*", AStar);  // Assumes AStar has signature: (int, int, bool[,]) => Task
             mazeSolvingMethods.Add("DFS", DFS);  // Assumes DFS has signature: (int, int, bool[,]) => Task
             mazeSolvingMethods.Add("BFS", BFS);  // Assumes BFS has signature: (int, int, bool[,]) => Task
             cboxSolveMethod.Items.AddRange(mazeSolvingMethods.Keys.ToArray());
@@ -364,6 +365,7 @@ namespace MicroMaze
             }
         }
 
+
         /***************************************************************************************/
         /***************************************************************************************/
 
@@ -394,6 +396,86 @@ namespace MicroMaze
                 // Handle the case where no valid method was selected
                 // For example, use a default solver
                 await DFS(mouseX, mouseY, visited);
+            }
+        }
+
+        private async Task AStar(int startX, int startY, bool[,] visited)
+        {
+            // Priority queue to select the next node with the smallest cost
+            var openSet = new SortedDictionary<double, Tuple<int, int>>();
+            var cameFrom = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
+            var gScore = new Dictionary<Tuple<int, int>, double>();
+            var fScore = new Dictionary<Tuple<int, int>, double>();
+
+            var start = new Tuple<int, int>(startX, startY);
+            openSet[0] = start;
+            gScore[start] = 0;
+            fScore[start] = HeuristicCostEstimate(startX, startY, exitX, exitY);
+
+            while (openSet.Count > 0)
+            {
+                var current = openSet.First().Value;
+                if (current.Item1 == exitX && current.Item2 == exitY)
+                {
+                    await ReconstructPath(cameFrom, current);
+                    return;
+                }
+
+                openSet.Remove(openSet.First().Key);
+                visited[current.Item2, current.Item1] = true;
+
+                for (int i = -1; i <= 1; i++)
+                {
+                    for (int j = -1; j <= 1; j++)
+                    {
+                        int newX = current.Item1 + i;
+                        int newY = current.Item2 + j;
+                        if (newX >= 0 && newY >= 0 && newX < maze.GetLength(1) && newY < maze.GetLength(0) && Math.Abs(i + j) == 1)
+                        {
+                            if (maze[newY, newX] != 1)
+                            {
+                                var neighbor = new Tuple<int, int>(newX, newY);
+                                double tentativeGScore = gScore[current] + 1;
+
+                                if (visited[newY, newX] && tentativeGScore >= gScore[neighbor])
+                                {
+                                    continue;
+                                }
+
+                                if (!visited[newY, newX] || tentativeGScore < gScore[neighbor])
+                                {
+                                    cameFrom[neighbor] = current;
+                                    gScore[neighbor] = tentativeGScore;
+                                    fScore[neighbor] = gScore[neighbor] + HeuristicCostEstimate(newX, newY, exitX, exitY);
+                                    if (!visited[newY, newX])
+                                    {
+                                        openSet[fScore[neighbor]] = neighbor;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private double HeuristicCostEstimate(int x1, int y1, int x2, int y2)
+        {
+            return Math.Abs(x1 - x2) + Math.Abs(y1 - y2);
+        }
+
+        private async Task ReconstructPath(Dictionary<Tuple<int, int>, Tuple<int, int>> cameFrom, Tuple<int, int> current)
+        {
+            var totalPath = new List<Tuple<int, int>>();
+            totalPath.Add(current);
+            while (cameFrom.Keys.Contains(current))
+            {
+                current = cameFrom[current];
+                totalPath.Add(current);
+
+                // Update the player position and delay 
+                panelMouse.Location = new Point(current.Item1 * CELL_SIZE, current.Item2 * CELL_SIZE);
+                await Task.Delay(100); // adjust delay as needed
             }
         }
 
